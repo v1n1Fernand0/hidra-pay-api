@@ -1,10 +1,8 @@
-﻿using System;
-using System.Net.Http;
-using System.Net.Http.Json;
-using HidraPay.Domain.Ports;
-using HidraPay.Infrastructure.Configuration;
+﻿using HidraPay.Domain.Ports;
 using HidraPay.Infrastructure.Gateways;
 using HidraPay.Infrastructure.Gateways.AbacatePay;
+using HidraPay.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -21,11 +19,8 @@ namespace HidraPay.Infrastructure.Configuration
             this IServiceCollection services,
             IConfiguration config)
         {
-            //
-            // 1) Stripe SDK (apenas CreditCard)
-            //
+            #region Stripe
             services.Configure<StripeSettings>(config.GetSection("Stripe"));
-
             services.AddSingleton(sp =>
             {
                 var settings = sp.GetRequiredService<IOptions<StripeSettings>>().Value;
@@ -34,26 +29,17 @@ namespace HidraPay.Infrastructure.Configuration
             });
             services.AddTransient<StripeGateway>();
             services.AddTransient<IPaymentGateway, StripeGateway>();
+            #endregion
 
-            //
-            // 2) AbacatePay via HttpClient + Polly (Pix e Boleto)
-            //
+            #region AbacatePay
             services.Configure<AbacatePaySettings>(config.GetSection("AbacatePay"));
-
             var retryPolicy = HttpPolicyExtensions
                 .HandleTransientHttpError()
                 .Or<TimeoutRejectedException>()
-                .WaitAndRetryAsync(
-                    retryCount: 3,
-                    sleepDurationProvider: attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt))
-                );
-
+                .WaitAndRetryAsync(3, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)));
             var circuitBreaker = HttpPolicyExtensions
                 .HandleTransientHttpError()
-                .CircuitBreakerAsync(
-                    handledEventsAllowedBeforeBreaking: 5,
-                    durationOfBreak: TimeSpan.FromSeconds(30)
-                );
+                .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
 
             services.AddHttpClient<AbacatePayGateway>((sp, client) =>
             {
@@ -68,6 +54,14 @@ namespace HidraPay.Infrastructure.Configuration
 
             services.AddTransient<AbacatePayGateway>();
             services.AddTransient<IPaymentGateway, AbacatePayGateway>();
+            #endregion
+
+
+            services.AddDbContext<HidraPayDbContext>(opts =>
+                opts.UseSqlServer(config.GetConnectionString("DefaultConnection")));
+
+
+            services.AddTransient<IPaymentRepository, PaymentRepository>();
 
             return services;
         }
