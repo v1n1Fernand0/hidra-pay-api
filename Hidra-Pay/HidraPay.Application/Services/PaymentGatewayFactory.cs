@@ -21,16 +21,15 @@ namespace HidraPay.Application.Services
         {
             var gateway = _gateways
                 .OfType<IFeaturesMethod>()
-                .FirstOrDefault(g => g.SupportedMethod == method);
+                .FirstOrDefault(g => g.SupportedMethods.Contains(method));
 
-
-            if (gateway is null)
+            if (gateway == null)
                 throw new NotSupportedException(
-                    string.Format(ErrorMessages.MethodNotSupported, method)
-                );
+                    string.Format(ErrorMessages.MethodNotSupported, method));
 
             return (IPaymentGateway)gateway;
         }
+
     }
 }
 

@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using HidraPay.Api.Models;
-using HidraPay.Application.Services;
+﻿using HidraPay.Api.Models;
+using HidraPay.Application.UseCases.AuthorizePayment;
+using HidraPay.Application.UseCases.CapturePayment;
+using HidraPay.Application.UseCases.GetStatus;       
+using HidraPay.Application.UseCases.RefundPayment;
 using HidraPay.Domain.ValueObjects;
-using HidraPay.Domain.Enums;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HidraPay.Api.Controllers
 {
@@ -10,34 +12,88 @@ namespace HidraPay.Api.Controllers
     [Route("api/[controller]")]
     public class PaymentsController : ControllerBase
     {
-        private readonly PaymentService _service;
+        private readonly IAuthorizePaymentUseCase _authorize;
+        private readonly ICapturePaymentUseCase _capture;
+        private readonly IRefundPaymentUseCase _refund;
+        private readonly IGetStatusUseCase _status;
 
-        public PaymentsController(PaymentService service)
+        public PaymentsController(
+            IAuthorizePaymentUseCase authorize,
+            ICapturePaymentUseCase capture,
+            IRefundPaymentUseCase refund,
+            IGetStatusUseCase status)
         {
-            _service = service;
+            _authorize = authorize;
+            _capture = capture;
+            _refund = refund;
+            _status = status;
         }
 
         [HttpPost("authorize")]
         public async Task<ActionResult<PaymentResponseModel>> Authorize([FromBody] AuthorizeRequestModel model)
         {
             var request = new PaymentRequest(
-                OrderId: model.OrderId,
-                Amount: model.Amount,
-                Currency: model.Currency,
-                Method: Enum.Parse<PaymentMethod>(model.Method, ignoreCase: true),
-                ExpiresAt: model.ExpiresAt
+                model.OrderId,
+                model.Amount,
+                model.Currency,
+                model.Method,
+                model.ExpiresAt
             );
-
-            var result = await _service.AuthorizeAsync(request);
-
-            var response = new PaymentResponseModel
+            var result = await _authorize.ExecuteAsync(request);
+            return Ok(new PaymentResponseModel
             {
                 TransactionId = result.TransactionId,
                 Status = result.Status,
                 Amount = result.Amount
-            };
+            });
+        }
 
-            return Ok(response);
+        [HttpPost("capture")]
+        public async Task<ActionResult<PaymentResponseModel>> Capture([FromBody] CaptureRequestModel model)
+        {
+            var result = await _capture.ExecuteAsync(
+                model.TransactionId,
+                model.Amount,
+                model.Method
+            );
+            return Ok(new PaymentResponseModel
+            {
+                TransactionId = result.TransactionId,
+                Status = result.Status,
+                Amount = result.Amount
+            });
+        }
+
+        [HttpPost("refund")]
+        public async Task<ActionResult<PaymentResponseModel>> Refund([FromBody] RefundRequestModel model)
+        {
+            var result = await _refund.ExecuteAsync(
+                model.TransactionId,
+                model.Amount,
+                model.Method
+            );
+            return Ok(new PaymentResponseModel
+            {
+                TransactionId = result.TransactionId,
+                Status = result.Status,
+                Amount = result.Amount
+            });
+        }
+
+        [HttpGet("status")]
+        public async Task<ActionResult<PaymentResponseModel>> Status([FromQuery] StatusRequestModel model)
+        {
+            var status = await _status.ExecuteAsync(
+                model.TransactionId,
+                model.Method
+            );
+
+            return Ok(new PaymentResponseModel
+            {
+                TransactionId = model.TransactionId,
+                Status = status,
+                Amount = 0m
+            });
         }
     }
 }
