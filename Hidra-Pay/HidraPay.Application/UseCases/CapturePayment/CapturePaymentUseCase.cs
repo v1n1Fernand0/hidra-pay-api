@@ -1,21 +1,36 @@
-﻿using HidraPay.Application.Services;
+﻿using HidraPay.Application.Constants;
+using HidraPay.Application.Services;
+using HidraPay.Application.UseCases.CapturePayment;
+using HidraPay.Domain.Enums;
+using HidraPay.Domain.Ports;
 using HidraPay.Domain.ValueObjects;
 
-namespace HidraPay.Application.UseCases.CapturePayment
+public class CapturePaymentUseCase : ICapturePaymentUseCase
 {
-    public class CapturePaymentUseCase : ICapturePaymentUseCase
+    private readonly PaymentGatewayFactory _factory;
+    private readonly IPaymentRepository _repo;
+
+    public CapturePaymentUseCase(
+        PaymentGatewayFactory factory,
+        IPaymentRepository repo)
     {
-        private readonly PaymentGatewayFactory _factory;
+        _factory = factory;
+        _repo = repo;
+    }
 
-        public CapturePaymentUseCase(PaymentGatewayFactory factory)
-        {
-            _factory = factory;
-        }
+    public async Task<PaymentResult> ExecuteAsync(string txId, decimal amount, PaymentMethod method)
+    {
+        var transaction = await _repo.GetByTransactionIdAsync(txId)
+            ?? throw new InvalidOperationException(
+                string.Format(ErrorMessages.MethodNotSupported, txId));
 
-        public Task<PaymentResult> ExecuteAsync(string transactionId, decimal amount, Domain.Enums.PaymentMethod method)
-        {
-            var gateway = _factory.GetGateway(method);
-            return gateway.CaptureAsync(transactionId, amount);
-        }
+
+        var result = await _factory.GetGateway(method)
+            .CaptureAsync(txId, amount);
+
+        transaction.UpdateStatus(result.Status);
+        await _repo.UpdateAsync(transaction);
+
+        return result;
     }
 }

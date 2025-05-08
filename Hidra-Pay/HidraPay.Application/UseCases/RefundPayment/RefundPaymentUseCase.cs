@@ -1,4 +1,10 @@
-﻿using HidraPay.Application.Services;
+﻿using System;
+using System.Threading.Tasks;
+using HidraPay.Application.Constants;
+using HidraPay.Application.Services;
+using HidraPay.Application.UseCases.RefundPayment;
+using HidraPay.Domain.Enums;
+using HidraPay.Domain.Ports;
 using HidraPay.Domain.ValueObjects;
 
 namespace HidraPay.Application.UseCases.RefundPayment
@@ -6,16 +12,30 @@ namespace HidraPay.Application.UseCases.RefundPayment
     public class RefundPaymentUseCase : IRefundPaymentUseCase
     {
         private readonly PaymentGatewayFactory _factory;
+        private readonly IPaymentRepository _repo;
 
-        public RefundPaymentUseCase(PaymentGatewayFactory factory)
+        public RefundPaymentUseCase(
+            PaymentGatewayFactory factory,
+            IPaymentRepository repo)
         {
             _factory = factory;
+            _repo = repo;
         }
 
-        public Task<PaymentResult> ExecuteAsync(string transactionId, decimal amount, HidraPay.Domain.Enums.PaymentMethod method)
+        public async Task<PaymentResult> ExecuteAsync(string txId, decimal amount, PaymentMethod method)
         {
-            var gateway = _factory.GetGateway(method);
-            return gateway.RefundAsync(transactionId, amount);
+            var transaction = await _repo.GetByTransactionIdAsync(txId)
+                ?? throw new InvalidOperationException(
+                    string.Format(ErrorMessages.TransactionNotFound, txId));
+
+            var result = await _factory
+                .GetGateway(method)
+                .RefundAsync(txId, amount);
+
+            transaction.UpdateStatus(result.Status);
+            await _repo.UpdateAsync(transaction);
+
+            return result;
         }
     }
 }

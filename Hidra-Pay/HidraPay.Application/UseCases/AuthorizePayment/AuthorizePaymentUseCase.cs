@@ -1,21 +1,38 @@
 ﻿using HidraPay.Application.Services;
+using HidraPay.Application.UseCases.AuthorizePayment;
+using HidraPay.Domain.Entities;
+using HidraPay.Domain.Ports;
 using HidraPay.Domain.ValueObjects;
 
-namespace HidraPay.Application.UseCases.AuthorizePayment
+public class AuthorizePaymentUseCase : IAuthorizePaymentUseCase
 {
-    public class AuthorizePaymentUseCase : IAuthorizePaymentUseCase
+    private readonly PaymentGatewayFactory _factory;
+    private readonly IPaymentRepository _repo;
+
+    public AuthorizePaymentUseCase(
+        PaymentGatewayFactory factory,
+        IPaymentRepository repo)
     {
-        private readonly PaymentGatewayFactory _factory;
+        _factory = factory;
+        _repo = repo;
+    }
 
-        public AuthorizePaymentUseCase(PaymentGatewayFactory factory)
-        {
-            _factory = factory;
-        }
+    public async Task<PaymentResult> ExecuteAsync(PaymentRequest request)
+    {
+        var result = await _factory
+            .GetGateway(request.Method)
+            .AuthorizeAsync(request);
 
-        public Task<PaymentResult> ExecuteAsync(PaymentRequest request)
-        {
-            var gateway = _factory.GetGateway(request.Method);
-            return gateway.AuthorizeAsync(request);
-        }
+        var transaction = new PaymentTransaction(
+            orderId: request.OrderId,
+            transactionId: result.TransactionId,
+            amount: result.Amount,
+            currency: request.Currency,
+            method: request.Method,
+            status: result.Status
+        );
+        await _repo.AddAsync(transaction);
+
+        return result;
     }
 }
