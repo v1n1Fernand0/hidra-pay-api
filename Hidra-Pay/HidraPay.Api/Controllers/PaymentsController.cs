@@ -1,10 +1,10 @@
-﻿using HidraPay.Api.Models;
+﻿using Microsoft.AspNetCore.Mvc;
+using HidraPay.Api.Models;
 using HidraPay.Application.UseCases.AuthorizePayment;
 using HidraPay.Application.UseCases.CapturePayment;
-using HidraPay.Application.UseCases.GetStatus;       
 using HidraPay.Application.UseCases.RefundPayment;
+using HidraPay.Application.UseCases.GetStatus;
 using HidraPay.Domain.ValueObjects;
-using Microsoft.AspNetCore.Mvc;
 
 namespace HidraPay.Api.Controllers
 {
@@ -87,7 +87,6 @@ namespace HidraPay.Api.Controllers
                 model.TransactionId,
                 model.Method
             );
-
             return Ok(new PaymentResponseModel
             {
                 TransactionId = model.TransactionId,
