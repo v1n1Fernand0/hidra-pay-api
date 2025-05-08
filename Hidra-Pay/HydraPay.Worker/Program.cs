@@ -1,2 +1,14 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿using HidraPay.Messaging.Configuration;
+using HidraPay.Worker.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+Host.CreateDefaultBuilder(args)
+    .ConfigureServices((ctx, services) =>
+    {
+        services.AddMessaging(ctx.Configuration);
+
+        services.AddHostedService<PaymentEventsWorker>();
+    })
+    .Build()
+    .Run();
