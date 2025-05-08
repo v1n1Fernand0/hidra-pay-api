@@ -1,38 +1,51 @@
 ﻿using HidraPay.Application.Services;
-using HidraPay.Application.UseCases.AuthorizePayment;
 using HidraPay.Domain.Entities;
+using HidraPay.Domain.Events;
 using HidraPay.Domain.Ports;
 using HidraPay.Domain.ValueObjects;
+using HidraPay.Messaging.Interfaces;
 
-public class AuthorizePaymentUseCase : IAuthorizePaymentUseCase
+namespace HidraPay.Application.UseCases.AuthorizePayment
 {
-    private readonly PaymentGatewayFactory _factory;
-    private readonly IPaymentRepository _repo;
-
-    public AuthorizePaymentUseCase(
-        PaymentGatewayFactory factory,
-        IPaymentRepository repo)
+    public class AuthorizePaymentUseCase : IAuthorizePaymentUseCase
     {
-        _factory = factory;
-        _repo = repo;
-    }
+        private readonly PaymentGatewayFactory _factory;
+        private readonly IPaymentRepository _repo;
+        private readonly IEventPublisher _events;
 
-    public async Task<PaymentResult> ExecuteAsync(PaymentRequest request)
-    {
-        var result = await _factory
-            .GetGateway(request.Method)
-            .AuthorizeAsync(request);
+        public AuthorizePaymentUseCase(
+            PaymentGatewayFactory factory,
+            IPaymentRepository repo,
+            IEventPublisher events)
+        {
+            _factory = factory;
+            _repo = repo;
+            _events = events;
+        }
 
-        var transaction = new PaymentTransaction(
-            orderId: request.OrderId,
-            transactionId: result.TransactionId,
-            amount: result.Amount,
-            currency: request.Currency,
-            method: request.Method,
-            status: result.Status
-        );
-        await _repo.AddAsync(transaction);
+        public async Task<PaymentResult> ExecuteAsync(PaymentRequest request)
+        {
+            var result = await _factory
+                .GetGateway(request.Method)
+                .AuthorizeAsync(request);
 
-        return result;
+            var transaction = new PaymentTransaction(
+                orderId: request.OrderId,
+                transactionId: result.TransactionId,
+                amount: result.Amount,
+                currency: request.Currency,
+                method: request.Method,
+                status: result.Status
+            );
+            await _repo.AddAsync(transaction);
+
+            await _events.PublishAsync(new PaymentAuthorizedEvent(
+                transactionId: result.TransactionId,
+                orderId: request.OrderId,
+                amount: result.Amount
+            ));
+
+            return result;
+        }
     }
 }

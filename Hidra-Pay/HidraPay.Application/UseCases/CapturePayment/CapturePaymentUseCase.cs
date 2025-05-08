@@ -1,36 +1,47 @@
 ﻿using HidraPay.Application.Constants;
 using HidraPay.Application.Services;
-using HidraPay.Application.UseCases.CapturePayment;
 using HidraPay.Domain.Enums;
+using HidraPay.Domain.Events;
 using HidraPay.Domain.Ports;
 using HidraPay.Domain.ValueObjects;
+using HidraPay.Messaging.Interfaces;
 
-public class CapturePaymentUseCase : ICapturePaymentUseCase
+namespace HidraPay.Application.UseCases.CapturePayment
 {
-    private readonly PaymentGatewayFactory _factory;
-    private readonly IPaymentRepository _repo;
-
-    public CapturePaymentUseCase(
-        PaymentGatewayFactory factory,
-        IPaymentRepository repo)
+    public class CapturePaymentUseCase : ICapturePaymentUseCase
     {
-        _factory = factory;
-        _repo = repo;
-    }
+        private readonly PaymentGatewayFactory _factory;
+        private readonly IPaymentRepository _repo;
+        private readonly IEventPublisher _events;
 
-    public async Task<PaymentResult> ExecuteAsync(string txId, decimal amount, PaymentMethod method)
-    {
-        var transaction = await _repo.GetByTransactionIdAsync(txId)
-            ?? throw new InvalidOperationException(
-                string.Format(ErrorMessages.MethodNotSupported, txId));
+        public CapturePaymentUseCase(
+            PaymentGatewayFactory factory,
+            IPaymentRepository repo,
+            IEventPublisher events)
+        {
+            _factory = factory;
+            _repo = repo;
+            _events = events;
+        }
 
+        public async Task<PaymentResult> ExecuteAsync(string txId, decimal amount, PaymentMethod method)
+        {
+            var transaction = await _repo.GetByTransactionIdAsync(txId)
+                ?? throw new InvalidOperationException(
+                    string.Format(ErrorMessages.TransactionNotFound, txId));
 
-        var result = await _factory.GetGateway(method)
-            .CaptureAsync(txId, amount);
+            var result = await _factory.GetGateway(method)
+                                       .CaptureAsync(txId, amount);
 
-        transaction.UpdateStatus(result.Status);
-        await _repo.UpdateAsync(transaction);
+            transaction.UpdateStatus(result.Status);
+            await _repo.UpdateAsync(transaction);
 
-        return result;
+            await _events.PublishAsync(new PaymentCapturedEvent(
+                transactionId: txId,
+                amount: result.Amount
+            ));
+
+            return result;
+        }
     }
 }

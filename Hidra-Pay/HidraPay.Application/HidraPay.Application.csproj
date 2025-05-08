@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HidraPay.Domain\HidraPay.Domain.csproj" />
+    <ProjectReference Include="..\HydraPay.Messaging\HydraPay.Messaging.csproj" />
   </ItemGroup>
 
 </Project>
